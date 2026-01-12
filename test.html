@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page - networkPoetics</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #0f0;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            border-bottom: 2px solid #0f0;
+            padding-bottom: 10px;
+        }
+        .status {
+            background: #111;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #0f0;
+        }
+        .blink {
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-family: monospace;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0c0;
+        }
+        #output {
+            background: #111;
+            padding: 10px;
+            margin: 20px 0;
+            min-height: 100px;
+            border: 1px solid #0f0;
+        }
+    </style>
+</head>
+<body>
+    <h1>> networkPoetics test page<span class="blink">_</span></h1>
+
+    <div class="status">
+        <p><strong>Status:</strong> CONNECTED</p>
+        <p><strong>Network:</strong> networkPoetics</p>
+        <p><strong>Device:</strong> Raspberry Pi Pico W</p>
+        <p><strong>Time:</strong> <span id="time"></span></p>
+    </div>
+
+    <h2>> Actions</h2>
+    <button onclick="testAPI()">Test API</button>
+    <button onclick="showMessage()">Show Message</button>
+    <button onclick="clearOutput()">Clear Output</button>
+    <button onclick="reloadPage()">Reload Page</button>
+
+    <h2>> Output</h2>
+    <div id="output">
+        <p>> System ready. Edit test.html to see live changes!</p>
+        <p>> Use mpremote mount to serve this file from your PC.</p>
+    </div>
+
+    <script>
+        // Update time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('time').textContent = now.toLocaleTimeString();
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // Test API endpoint
+        async function testAPI() {
+            const output = document.getElementById('output');
+            output.innerHTML += '<p>> Fetching /api/status...</p>';
+
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.text();
+                output.innerHTML += `<p>> Response: ${data}</p>`;
+            } catch (error) {
+                output.innerHTML += `<p>> Error: ${error.message}</p>`;
+                output.innerHTML += `<p>> Note: Make sure you're using example_with_static_files.py for API support</p>`;
+            }
+
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // Show message
+        function showMessage() {
+            const output = document.getElementById('output');
+            const messages = [
+                '> Hello from the network poetics portal!',
+                '> Packets traveling through silicon dreams...',
+                '> In this space, data becomes verse.',
+                '> Connected. Captive. Creative.',
+                '> Your edits to this file appear instantly!'
+            ];
+            const msg = messages[Math.floor(Math.random() * messages.length)];
+            output.innerHTML += `<p>${msg}</p>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // Clear output
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '<p>> Output cleared.</p>';
+        }
+
+        // Reload page
+        function reloadPage() {
+            location.reload();
+        }
+
+        // Console message
+        console.log('%c> networkPoetics test page loaded', 'color: #0f0; font-family: monospace;');
+        console.log('%c> Edit test.html and reload to see changes', 'color: #0f0; font-family: monospace;');
+    </script>
+</body>
+</html>

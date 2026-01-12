@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>networkPoetics</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #7e22ce 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 0.3em;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            animation: fadeIn 1s ease-in;
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 2em;
+            opacity: 0.9;
+            font-style: italic;
+        }
+
+        .content {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.8s ease-out;
+        }
+
+        .poem {
+            font-size: 1.1em;
+            line-height: 1.8;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .info-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .info-card strong {
+            display: block;
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-bottom: 8px;
+        }
+
+        .info-card span {
+            font-size: 1.3em;
+            color: #a78bfa;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2em;
+            }
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>networkPoetics</h1>
+        <p class="subtitle">where networks become verse</p>
+
+        <div class="content">
+            <div class="poem">
+                <p>in packets we trust,</p>
+                <p>through silicon dreams and wireless dust,</p>
+                <p>each connection a thread,</p>
+                <p>weaving words left unsaid.</p>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <strong>Network</strong>
+                    <span>networkPoetics</span>
+                </div>
+                <div class="info-card">
+                    <strong>Status</strong>
+                    <span>Connected</span>
+                </div>
+                <div class="info-card">
+                    <strong>Portal</strong>
+                    <span>Active</span>
+                </div>
+                <div class="info-card">
+                    <strong>Device</strong>
+                    <span>Pico W</span>
+                </div>
+            </div>
+
+            <div class="footer">
+                <p>MicroPython + Phew | Captive Portal Experiment</p>
+                <p>Edit this file to create your own poetic network space</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
