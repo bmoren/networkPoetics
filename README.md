@@ -1,6 +1,6 @@
 # networkPoetics
 
-A WiFi captive portal for Raspberry Pi Pico W. When devices connect to the network it creates, a portal page appears automatically — serving whatever HTML, images, and media you put on it.
+A WiFi captive portal for Raspberry Pi Pico W 2. When devices connect to the network it creates, a portal page appears automatically — serving whatever HTML, images, and media you put on it.
 
 Built for network poetry, art installations, and offline creative experiences.
 
@@ -56,8 +56,6 @@ The Pico auto-runs `main.py` on every boot — no PC needed once deployed.
 2. Captive portal appears automatically
 3. If it doesn't auto-appear: open browser to `http://192.168.4.1`
 
----
-
 ## Development workflow (temporary viewing)
 
 Edit files on your computer and see changes instantly without copying to the Pico.
@@ -72,8 +70,6 @@ The `+` is important — it mounts your local folder and starts the server toget
 - Edit `index.html` in your editor, refresh browser — changes appear immediately
 - Add files to `media/` — accessible at `http://192.168.4.1/media/filename`
 - Press `Ctrl+C` to stop
-
----
 
 ## Deployment (for final / standalone use)
 
@@ -92,8 +88,6 @@ mpremote ls
 ```
 
 Disconnect USB — Pico runs from any USB power source.
-
----
 
 ## Customization of WiFi name or password
 
@@ -142,7 +136,6 @@ Reference files in your HTML using root-relative paths:
 
 Supported types: JPEG, PNG, GIF, WebP, SVG, MP4, WebM, MP3, WAV, CSS, JS
 
----
 
 ## File management reference
 
@@ -171,8 +164,6 @@ mpremote exec "import os; s = os.statvfs('/'); print('Free:', s[0]*s[3]//1024, '
 mpremote
 ```
 
----
-
 ## Troubleshooting
 
 **Device not found**
@@ -192,8 +183,6 @@ mpremote
 **Out of space**
 - Pico W has ~1.4 MB for files; keep images compressed (WebP or small JPEG), avoid video
 - Remove files: `mpremote rm :large_file.mp4`
-
----
 
 ## Technical
 
