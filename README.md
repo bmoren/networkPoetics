@@ -41,9 +41,12 @@ cd networkPoetics_micropython
 mpremote cp main.py :main.py
 mpremote cp index.html :index.html
 
-# Copy media folder (if you have one)
+# Copy media from folder (if you have one)
+#first make the folder
 mpremote mkdir :media
-mpremote cp -r media :media
+#then copy each file (must do each one, one by one.)
+mpremote cp media/photo.jpg :media/photo.jpg
+
 ```
 
 The Pico auto-runs `main.py` on every boot — no PC needed once deployed.
@@ -81,7 +84,8 @@ mpremote cp index.html :index.html
 
 # Copy media folder
 mpremote mkdir :media
-mpremote cp -r media :media
+mpremote cp media/photo.jpg :media/photo.jpg
+# repeat for each file
 
 # Verify
 mpremote ls
@@ -148,8 +152,22 @@ mpremote ls :media
 mpremote cp file.html :file.html
 
 # Copy an entire folder
-mpremote mkdir :media
-mpremote cp -r media :media
+# Note: destination must not already exist — if it does, delete it first:
+mpremote exec "
+import os
+def rmrf(p):
+    for n in os.listdir(p):
+        f = p+'/'+n
+        try: rmrf(f)
+        except: pass
+        try: os.remove(f)
+        except: os.rmdir(f)
+rmrf('/media')
+os.rmdir('/media')
+"
+
+#batch copy files to an existing folder on the pico
+for f in media/*; do mpremote cp "$f" ":media/$(basename $f)"; done
 
 # Create a directory
 mpremote mkdir :foldername
