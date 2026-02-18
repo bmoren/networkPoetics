@@ -58,7 +58,7 @@ The Pico auto-runs `main.py` on every boot — no PC needed once deployed.
 
 ---
 
-## Development workflow
+## Development workflow (temporary viewing)
 
 Edit files on your computer and see changes instantly without copying to the Pico.
 
@@ -75,7 +75,7 @@ The `+` is important — it mounts your local folder and starts the server toget
 
 ---
 
-## Deployment (standalone)
+## Deployment (for final / standalone use)
 
 Copy files to the Pico for standalone operation (no PC needed).
 
@@ -95,9 +95,7 @@ Disconnect USB — Pico runs from any USB power source.
 
 ---
 
-## Customization
-
-### Change WiFi name or password
+## Customization of WiFi name or password
 
 Edit `networkPoetics_micropython/main.py`:
 
@@ -119,6 +117,7 @@ Upload and press RESET on the Pico:
 mpremote cp main.py :main.py
 ```
 
+## Additional Files for expanded projects
 ### Multiple pages
 
 ```bash
