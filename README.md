@@ -29,6 +29,22 @@ pip install mpremote      # Windows
 mpremote mip install github:pimoroni/phew
 ```
 
+**If you get an SSL certificate error on macOS**, run this instead:
+```bash
+SSL_CERT_FILE=$(python3 -c "import certifi; print(certifi.where())") mpremote mip install github:pimoroni/phew
+```
+(Install certifi first if needed: `pip3 install certifi`)
+
+**Manual install fallback** — download the Phew repo from GitHub as a zip, extract it, then:
+```bash
+mpremote mkdir :lib
+mpremote mkdir :lib/phew
+mpremote cp phew/__init__.py :lib/phew/__init__.py
+mpremote cp phew/dns.py :lib/phew/dns.py
+mpremote cp phew/logging.py :lib/phew/logging.py
+mpremote cp phew/server.py :lib/phew/server.py
+```
+
 Verify:
 ```bash
 mpremote ls :lib/phew
