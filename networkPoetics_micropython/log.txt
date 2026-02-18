@@ -1,0 +1,2 @@
+2021-01-01 00:16:51 [info     / 427kB] > starting catch all dns server on port 53
+2021-01-01 00:02:40 [info     / 421kB] > starting catch all dns server on port 53
