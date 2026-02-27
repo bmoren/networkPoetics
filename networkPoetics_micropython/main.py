@@ -10,16 +10,43 @@ File Management:
 """
 
 import uasyncio as asyncio
+import machine
+import os
 from phew import access_point, dns
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 AP_SSID     = "networkPoetics"
 AP_PASSWORD = "poetics123"
 
+# Built-in LED — lights up when the WiFi AP is active
+led = machine.Pin("LED", machine.Pin.OUT)
+
+# SD card SPI pins — change if you wired differently
+SD_SCK  = 2
+SD_MOSI = 3
+SD_MISO = 4
+SD_CS   = 5
+
+# ── SD Card ───────────────────────────────────────────────────────────────────
+SD_MOUNTED = False
+try:
+    import sdcard
+    spi = machine.SPI(0, baudrate=20_000_000, polarity=0, phase=0,
+                      sck=machine.Pin(SD_SCK),
+                      mosi=machine.Pin(SD_MOSI),
+                      miso=machine.Pin(SD_MISO))
+    sd = sdcard.SDCard(spi, machine.Pin(SD_CS))
+    os.mount(os.VfsFat(sd), "/sd")
+    SD_MOUNTED = True
+    print("SD card mounted at /sd")
+except Exception as e:
+    print(f"No SD card (continuing without): {e}")
+
 # ── Access Point + DNS ────────────────────────────────────────────────────────
 print("Starting access point...")
 ap = access_point(AP_SSID, password=AP_PASSWORD)
 ip = ap.ifconfig()[0]
+led.on()
 print(f"AP: {AP_SSID}  IP: {ip}")
 
 dns.run_catchall(ip)
@@ -46,7 +73,7 @@ MIME = {
     ".pdf":  "application/pdf",
 }
 
-BINARY_PREFIXES = ("image/", "video/", "audio/", "application/pdf")
+CHUNK_SIZE = 8192  # bytes per read — safe for Pico 2W's 520 KB RAM
 
 CAPTIVE_PATHS = frozenset([
     "/generate_204", "/gen_204",
@@ -89,25 +116,20 @@ def mime_for(path):
             return ct
     return "application/octet-stream"
 
-def read_file(path):
-    """Return (bytes, mime) for path, trying /remote first. None on failure."""
-    ct   = mime_for(path)
-    mode = "rb" if ct.split(";")[0].startswith(BINARY_PREFIXES) else "r"
-    for candidate in (f"/remote{path}", path):
+def find_file(path):
+    """Locate a file, return (filepath, mime) or (None, None)."""
+    ct = mime_for(path)
+    candidates = [f"/remote{path}"]
+    if SD_MOUNTED:
+        candidates.append(f"/sd{path}")
+    candidates.append(path)
+    for candidate in candidates:
         try:
-            with open(candidate, mode) as f:
-                data = f.read()
-            if isinstance(data, str):
-                data = data.encode()
-            print(f"  served {candidate} ({len(data)}b)")
-            return data, ct
+            os.stat(candidate)
+            return candidate, ct
         except:
             pass
     return None, None
-
-def index_bytes():
-    data, _ = read_file("/index.html")
-    return data if data else FALLBACK_HTML
 
 # ── Raw HTTP helpers ──────────────────────────────────────────────────────────
 async def send(writer, status, content_type, body):
@@ -123,6 +145,51 @@ async def send(writer, status, content_type, body):
     writer.write(hdr)
     writer.write(body)
     await writer.drain()
+
+async def send_file(writer, content_type, filepath, range_header=None):
+    """Stream a file in chunks. Supports HTTP Range requests for audio/video."""
+    size = os.stat(filepath)[6]
+
+    # Parse Range header (e.g. "bytes=0-" or "bytes=1024-2047")
+    start, end = 0, size - 1
+    is_range = False
+    if range_header and range_header.startswith("bytes="):
+        is_range = True
+        r = range_header[6:].split("-")
+        start = int(r[0]) if r[0] else 0
+        end   = int(r[1]) if len(r) > 1 and r[1] else size - 1
+        end   = min(end, size - 1)
+
+    length = end - start + 1
+    status = "206 Partial Content" if is_range else "200 OK"
+    hdr = (
+        f"HTTP/1.1 {status}\r\n"
+        f"Content-Type: {content_type}\r\n"
+        f"Content-Length: {length}\r\n"
+        f"Content-Range: bytes {start}-{end}/{size}\r\n"
+        "Accept-Ranges: bytes\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+    ).encode()
+    writer.write(hdr)
+    await writer.drain()
+
+    with open(filepath, "rb") as f:
+        if start:
+            f.seek(start)
+        remaining = length
+        n = 0
+        while remaining > 0:
+            chunk = f.read(min(CHUNK_SIZE, remaining))
+            if not chunk:
+                break
+            writer.write(chunk)
+            remaining -= len(chunk)
+            n += 1
+            if n % 4 == 0:
+                await writer.drain()
+        await writer.drain()
+    print(f"  streamed {filepath} ({start}-{end}/{size})")
 
 async def send_redirect(writer, location):
     hdr = (
@@ -147,13 +214,17 @@ async def handle(reader, writer):
             return
         path = parts[1].split("?")[0]   # strip query string
 
-        # Drain remaining headers
+        # Drain remaining headers, capture Range if present
+        range_header = None
         while True:
             h = await asyncio.wait_for(reader.readline(), 5)
             if h in (b"\r\n", b"\n", b""):
                 break
+            hl = h.decode()
+            if hl.lower().startswith("range:"):
+                range_header = hl.split(":", 1)[1].strip()
 
-        print(f"GET {path}")
+        print(f"GET {path}" + (f" [{range_header}]" if range_header else ""))
 
         # 1. Captive portal OS detection → redirect to portal
         if path in CAPTIVE_PATHS:
@@ -162,17 +233,25 @@ async def handle(reader, writer):
 
         # 2. Root → serve index
         if path in ("/", ""):
-            await send(writer, "200 OK", "text/html; charset=utf-8", index_bytes())
+            fp, _ = find_file("/index.html")
+            if fp:
+                await send_file(writer, "text/html; charset=utf-8", fp)
+            else:
+                await send(writer, "200 OK", "text/html; charset=utf-8", FALLBACK_HTML)
             return
 
         # 3. Static files
-        data, ct = read_file(path)
-        if data:
-            await send(writer, "200 OK", ct, data)
+        fp, ct = find_file(path)
+        if fp:
+            await send_file(writer, ct, fp, range_header)
             return
 
         # 4. Anything else → serve index (keeps captive portal visible)
-        await send(writer, "200 OK", "text/html; charset=utf-8", index_bytes())
+        fp, _ = find_file("/index.html")
+        if fp:
+            await send_file(writer, "text/html; charset=utf-8", fp)
+        else:
+            await send(writer, "200 OK", "text/html; charset=utf-8", FALLBACK_HTML)
 
     except Exception as e:
         print(f"handler error: {e}")
