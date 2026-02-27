@@ -1,4 +1,4 @@
-# networkPoetics
+ # networkPoetics
 
 A WiFi captive portal for Raspberry Pi Pico W 2. When devices connect to the network it creates, a portal page appears automatically — serving whatever HTML, images, and media you put on it.
 
@@ -218,6 +218,147 @@ mpremote
 - Pico W has ~1.4 MB for files; keep images compressed (WebP or small JPEG), avoid video
 - Remove files: `mpremote rm :large_file.mp4`
 
+## Adding an SD card (expanded storage)
+
+The Pico 2W has ~1.4 MB of usable flash. A microSD card expands this to gigabytes, making it practical to serve large images, audio, and video.
+
+### 1. What to buy
+
+Any **SPI microSD breakout board** works. Search for "SPI SD card module" or "microSD breakout" — these are widely available for a few dollars. Common options:
+
+- Generic SPI SD card module (cheapest, widely available)
+- Adafruit MicroSD SPI Breakout (reliable, well-documented)
+- SparkFun MicroSD Transflash Breakout
+
+You'll also need short jumper wires (female-to-male or female-to-female depending on your breakout).
+
+### 2. Wiring
+
+Connect the SD module to the Pico 2W using SPI0:
+
+| SD module pin | Pico 2W pin | Physical pin |
+|---|---|---|
+| VCC / 3V3 | 3.3V | Pin 36 |
+| GND | GND | Pin 38 |
+| SCK / CLK | GP2 | Pin 4 |
+| MOSI / SDI / DI | GP3 | Pin 5 |
+| MISO / SDO / DO | GP4 | Pin 6 |
+| CS / CE | GP5 | Pin 7 |
+
+> Pin labels vary by breakout board — VCC/3V3, MOSI/SDI/DI, and MISO/SDO/DO are the same signals with different names.
+
+> **Important:** Use the **3.3V** pin, not 5V. Most SD modules include a voltage regulator, but always check your specific board's datasheet.
+
+### 3. Format the SD card
+
+Format as **FAT32**. Most cards ship pre-formatted as FAT32 — if yours isn't, format it on your computer before use. Cards up to 32 GB work reliably; larger cards may need exFAT which is not supported.
+
+### 4. Install the SD driver onto the Pico
+
+```bash
+mpremote mip install sdcard
+```
+
+Verify:
+```bash
+mpremote ls :lib
+# should show: sdcard.py (or sdcard/)
+```
+
+### 5. Upload updated main.py
+
+```bash
+mpremote cp main.py :main.py
+```
+
+Reset the Pico. You should see `SD card mounted at /sd` in the serial output if wired correctly.
+
+Check serial output:
+```bash
+mpremote
+```
+
+### 6. Put files on the SD card
+
+Connect the SD card to your computer and copy files directly in Finder or Explorer. Use the same folder structure as you would on the Pico flash:
+
+```
+SD card root/
+├── index.html          (optional — overrides flash version)
+├── media/
+│   ├── photo.jpg
+│   ├── audio.mp3
+│   └── video.mp4
+└── css/
+    └── style.css
+```
+
+Eject the SD card, insert it into the module, and power the Pico. Your HTML doesn't need to change — `/media/photo.jpg` works whether the file is on the SD card or Pico flash.
+
+**File serving priority:** development mount → SD card → Pico flash
+
+If no SD card is detected at boot the portal continues normally using flash storage only.
+
+### Performance expectations
+
+SD card files are served over SPI (a slow serial bus) through MicroPython, then over WiFi. The practical throughput ceiling is roughly **300–400 KB/s** — set by the Pico W's WiFi stack, not the card itself.
+
+What this means in practice:
+
+| Content | Works well? | Notes |
+|---|---|---|
+| HTML / CSS / JS | ✅ | Tiny files, instant |
+| Images (JPEG/WebP) | ✅ | Keep under ~2 MB |
+| Audio (MP3) | ✅ | Keep bitrate under 256 kbps |
+| Audio (WAV) | ⚠️ | Uncompressed — 44.1kHz stereo = 176 KB/s, just fits |
+| Video (MP4) | ⚠️ | Must be encoded at low bitrate — see below |
+
+**Preparing video for the Pico W**
+
+Video must be encoded at a low enough bitrate to stream in real time. Anything above ~2.5 Mbps (300 KB/s) will play in slow motion or stall.
+
+Re-encode with ffmpeg on your Mac:
+
+```bash
+ffmpeg -i input.mp4 -c:v libx264 -b:v 1200k -c:a aac -b:a 96k -movflags +faststart output.mp4
+```
+
+- `-b:v 1200k` — 1.2 Mbps video (adjust down if still slow)
+- `-b:a 96k` — 96 kbps audio
+- `-movflags +faststart` — moves metadata to the front so playback starts before the full file downloads
+
+Check the bitrate of any existing file:
+
+```bash
+ffprobe -v quiet -show_entries format=bit_rate -of default=noprint_wrappers=1 yourfile.mp4
+```
+
+**Keep wires short.** SPI runs at 20 MHz — longer jumper wires introduce noise and can cause read errors or card mount failures at boot.
+
+**The SD card must be inserted before power-on.** It is not hot-swappable; the driver only initialises once at boot.
+
+### Troubleshooting SD card
+
+**`No SD card (continuing without)`** at boot
+- Check wiring — especially MOSI/MISO aren't swapped (most common cause)
+- Verify VCC is connected to 3.3V not 5V
+- Try a different SD card (some cards are finicky at boot)
+- Confirm card is FAT32 formatted
+- If it worked before and stopped, try shorter jumper wires
+
+**`timeout waiting for v2 card`** in serial output
+- MOSI and MISO are likely swapped — swap those two wires and try again
+- Try a different SD card
+
+**Files on SD card not loading**
+- Check the card is properly inserted and seated
+- Verify file paths match exactly (case-sensitive)
+- Check `mpremote` serial output — it prints which path each file was served from
+
+**Video plays in slow motion / audio sounds slow**
+- The video bitrate is too high for the Pico W's WiFi throughput
+- Re-encode at a lower bitrate using the ffmpeg command above
+
 ## Technical
 
 - **Platform:** Raspberry Pi Pico W / MicroPython
@@ -225,5 +366,5 @@ mpremote
 - **WiFi:** Access Point mode at 192.168.4.1
 - **DNS:** UDP port 53, catchall redirects all queries to the portal
 - **HTTP:** Async server on port 80
-- **Storage:** LittleFS, ~1.4 MB usable
+- **Storage:** LittleFS, ~1.4 MB usable; microSD via SPI (FAT32, optional)
 - **Concurrent connections:** 4
