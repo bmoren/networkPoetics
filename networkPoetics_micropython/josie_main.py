@@ -52,6 +52,7 @@ import machine
 import network
 import os
 import struct
+import utime
 from phew import dns
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -70,6 +71,12 @@ POLL_INTERVAL_MS    = 100   # ms  — sensor polling rate
 
 # How long (seconds) the AP stays on after the last touch event
 AP_TIMEOUT_S = 30
+
+# Debounce: consecutive samples required to confirm touch ON / touch OFF.
+# The plasma ball signal is pulsed, so a single sample is not reliable.
+# Raise these numbers if the AP still flickers; lower them for faster response.
+TOUCH_CONFIRM_SAMPLES  = 3   # samples above threshold  → declare "touched"
+RELEASE_CONFIRM_SAMPLES = 8  # samples below threshold  → declare "released"
 
 # SD card SPI pins (unchanged from main.py)
 SD_SCK  = 2
@@ -168,12 +175,22 @@ ap_active  = False
 dns_started = False
 ip          = "192.168.4.1"   # Pico W default AP address
 
-def _bring_up_ap():
-    """Activate the WiFi AP interface."""
+async def _bring_up_ap():
+    """Activate the WiFi AP interface and wait until it has a valid IP."""
     global ip
     ap_wlan.active(True)
-    ap_wlan.config(ssid=AP_SSID, password=AP_PASSWORD, security=4)  # 4 = WPA2
-    ip = ap_wlan.ifconfig()[0]
+    if AP_PASSWORD:
+        ap_wlan.config(ssid=AP_SSID, password=AP_PASSWORD, security=4)  # WPA2
+    else:
+        ap_wlan.config(ssid=AP_SSID, security=0)                        # open
+    # Poll until the interface assigns itself an IP (avoids NoneType crash)
+    for _ in range(30):  # up to 3 seconds
+        cfg = ap_wlan.ifconfig()
+        if cfg[0] and cfg[0] != "0.0.0.0":
+            ip = cfg[0]
+            return
+        await asyncio.sleep_ms(100)
+    ip = "192.168.4.1"  # fallback if ifconfig never settles
 
 def _bring_down_ap():
     """Deactivate the WiFi AP interface."""
@@ -384,7 +401,7 @@ async def handle(reader, writer):
 
 # ── Touch / AP state machine ──────────────────────────────────────────────────
 async def touch_monitor():
-    """Poll INA219 and toggle the AP based on plasma ball touch."""
+    # Poll INA219 and toggle the AP based on plasma ball touch.
     global ap_active, dns_started, ip
 
     touch_state  = False   # True while finger on ball
@@ -393,7 +410,7 @@ async def touch_monitor():
     # If INA219 failed at init, just enable AP immediately as a fallback
     if ina is None:
         print("No INA219 — starting AP immediately (fallback mode).")
-        _bring_up_ap()
+        await _bring_up_ap()
         ap_active = True
         led.on()
         dns.run_catchall(ip)
@@ -401,15 +418,29 @@ async def touch_monitor():
         print(f"AP: {AP_SSID}  IP: {ip}")
         return  # exit coroutine — AP stays on permanently
 
-    print(f"Touch monitor active.  Threshold: ±{TOUCH_THRESHOLD_MA} mA")
+    # ── Baseline calibration ──────────────────────────────────────────────────
+    # The plasma ball draws significant idle current; we measure a baseline
+    # at startup and look for *delta* from that value, not an absolute level.
+    BASELINE_SAMPLES = 20
+    print(f"Calibrating baseline over {BASELINE_SAMPLES} samples...")
+    samples = []
+    for _ in range(BASELINE_SAMPLES):
+        try:
+            samples.append(ina.current_ma())
+        except:
+            pass
+        await asyncio.sleep_ms(POLL_INTERVAL_MS)
+    baseline = sum(samples) / len(samples) if samples else 0.0
+    print(f"Baseline: {baseline:.3f} mA  |  Touch delta threshold: ±{TOUCH_THRESHOLD_MA} mA")
     print("Waiting for plasma ball touch to activate WiFi...\n")
 
-    import utime
+    touch_count   = 0   # consecutive samples above threshold
+    release_count = 0   # consecutive samples below release threshold
 
     while True:
-        # Read absolute current (handles both polarities of induced current)
+        # Read current delta from idle baseline
         try:
-            ma = abs(ina.current_ma())
+            delta = abs(ina.current_ma() - baseline)
         except Exception as e:
             print(f"INA219 read error: {e}")
             await asyncio.sleep_ms(POLL_INTERVAL_MS)
@@ -417,29 +448,38 @@ async def touch_monitor():
 
         now = utime.ticks_ms()
 
-        # ── Touch onset ───────────────────────────────────────────────────────
-        if not touch_state and ma >= TOUCH_THRESHOLD_MA:
-            touch_state  = True
-            last_touch_t = now
-            print(f"TOUCH detected  ({ma:.3f} mA) → AP activating")
+        # ── Waiting for touch ─────────────────────────────────────────────────
+        if not touch_state:
+            if delta >= TOUCH_THRESHOLD_MA:
+                touch_count += 1
+                if touch_count >= TOUCH_CONFIRM_SAMPLES:
+                    touch_state   = True
+                    touch_count   = 0
+                    release_count = 0
+                    last_touch_t  = now
+                    print(f"TOUCH detected  (delta={delta:.3f} mA)")
+                    if not ap_active:
+                        await _bring_up_ap()
+                        ap_active = True
+                        led.on()
+                        if not dns_started:
+                            dns.run_catchall(ip)
+                            dns_started = True
+                        print(f"AP ON  →  SSID: {AP_SSID}  IP: {ip}")
+            else:
+                touch_count = 0   # reset — must be consecutive
 
-            if not ap_active:
-                _bring_up_ap()
-                ap_active = True
-                led.on()
-                if not dns_started:
-                    dns.run_catchall(ip)
-                    dns_started = True
-                print(f"AP ON  →  SSID: {AP_SSID}  IP: {ip}")
-
-        # ── Touch ongoing ─────────────────────────────────────────────────────
-        elif touch_state and ma >= (TOUCH_THRESHOLD_MA - TOUCH_HYSTERESIS_MA):
-            last_touch_t = now   # keep refreshing timeout while touched
-
-        # ── Touch released ────────────────────────────────────────────────────
-        elif touch_state and ma < (TOUCH_THRESHOLD_MA - TOUCH_HYSTERESIS_MA):
-            touch_state = False
-            print(f"TOUCH released  ({ma:.3f} mA)")
+        # ── Touch is active ───────────────────────────────────────────────────
+        else:
+            if delta >= (TOUCH_THRESHOLD_MA - TOUCH_HYSTERESIS_MA):
+                last_touch_t  = now   # still touching — keep AP timeout fresh
+                release_count = 0
+            else:
+                release_count += 1
+                if release_count >= RELEASE_CONFIRM_SAMPLES:
+                    touch_state   = False
+                    release_count = 0
+                    print(f"TOUCH released  (delta={delta:.3f} mA)")
 
         # ── AP timeout after last touch ───────────────────────────────────────
         if ap_active and not touch_state:
